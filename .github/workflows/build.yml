@@ -161,11 +161,27 @@ jobs:
       - name: Install build tools and LLVM
         shell: pwsh
         run: |
-          choco install -y ninja llvm --version="${{ matrix.llvm }}.0.0" --no-progress | Out-Null
-          $llvmPrefix = "C:\Program Files\LLVM"
-          if (-not (Test-Path "$llvmPrefix\bin\llvm-config.exe")) {
-            throw "LLVM not found at $llvmPrefix"
+          choco install -y ninja --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          choco install -y llvm --version="${{ matrix.llvm }}.0.0" --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Exact version ${{ matrix.llvm }}.0.0 failed via choco, trying latest ${{ matrix.llvm }}.x..."
+            choco install -y llvm --version="${{ matrix.llvm }}" --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+
+          $llvmCmd = Get-Command llvm-config -ErrorAction SilentlyContinue
+          if ($llvmCmd) {
+            $llvmPrefix = Split-Path (Split-Path $llvmCmd.Source -Parent) -Parent
+          } else {
+            $llvmPrefix = "C:\Program Files\LLVM"
+          }
+
+          if (-not (Test-Path "$llvmPrefix\bin\llvm-config.exe")) {
+            throw "LLVM not found; checked prefix: $llvmPrefix"
+          }
+
           "LLVM_PREFIX=$llvmPrefix" | Out-File -FilePath $env:GITHUB_ENV -Append
           "PATH=$llvmPrefix\bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CC=clang-cl" | Out-File -FilePath $env:GITHUB_ENV -Append
